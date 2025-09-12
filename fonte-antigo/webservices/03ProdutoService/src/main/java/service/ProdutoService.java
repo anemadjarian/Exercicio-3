@@ -1,6 +1,5 @@
 package service;
 
-import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -15,11 +14,7 @@ public class ProdutoService {
 	private ProdutoDAO produtoDAO;
 
 	public ProdutoService() {
-		try {
-			produtoDAO = new ProdutoDAO("produto.dat");
-		} catch (IOException e) {
-			System.out.println(e.getMessage());
-		}
+		produtoDAO = new ProdutoDAO();
 	}
 
 	public Object add(Request request, Response response) {
@@ -28,15 +23,13 @@ public class ProdutoService {
 		int quantidade = Integer.parseInt(request.queryParams("quantidade"));
 		LocalDateTime dataFabricacao = LocalDateTime.parse(request.queryParams("dataFabricacao"));
 		LocalDate dataValidade = LocalDate.parse(request.queryParams("dataValidade"));
-
-		int id = produtoDAO.getMaxId() + 1;
-
-		Produto produto = new Produto(id, descricao, preco, quantidade, dataFabricacao, dataValidade);
+		
+		Produto produto = new Produto(0, descricao, preco, quantidade, dataFabricacao, dataValidade);
 
 		produtoDAO.add(produto);
 
 		response.status(201); // 201 Created
-		return id;
+		return produto.getId();
 	}
 
 	public Object get(Request request, Response response) {

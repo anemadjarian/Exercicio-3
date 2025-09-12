@@ -2,123 +2,120 @@ package dao;
 
 import model.Produto;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
+public class ProdutoDAO extends DAO {
 
-public class ProdutoDAO {
-	private List<Produto> produtos;
-	private int maxId = 0;
-
-	private File file;
-	private FileOutputStream fos;
-	private ObjectOutputStream outputFile;
-
-	public int getMaxId() {
-		return maxId;
-	}
-
-	public ProdutoDAO(String filename) throws IOException {
-		file = new File(filename);
-		produtos = new ArrayList<Produto>();
-		if (file.exists()) {
-			readFromFile();
+	public ProdutoDAO() {
+		super();
+		// Certifica que a tabela existe no banco de dados.
+		// É uma boa prática, mas você pode remover se já tiver criado a tabela manualmente.
+		try (Statement st = connection.createStatement()) {
+			st.execute("CREATE TABLE IF NOT EXISTS produto ("
+					+ "id SERIAL PRIMARY KEY, "
+					+ "descricao VARCHAR(255) NOT NULL, "
+					+ "preco REAL NOT NULL, "
+					+ "quantidade INTEGER NOT NULL, "
+					+ "dataFabricacao TIMESTAMP NOT NULL, "
+					+ "dataValidade DATE NOT NULL)");
+		} catch (SQLException e) {
+			System.out.println("Erro ao criar a tabela 'produto': " + e.getMessage());
 		}
-
 	}
 
 	public void add(Produto produto) {
-		try {
-			produtos.add(produto);
-			this.maxId = (produto.getId() > this.maxId) ? produto.getId() : this.maxId;
-			this.saveToFile();
-		} catch (Exception e) {
-			System.out.println("ERRO ao gravar o produto '" + produto.getDescricao() + "' no disco!");
+		String sql = "INSERT INTO produto (descricao, preco, quantidade, dataFabricacao, dataValidade) VALUES (?, ?, ?, ?, ?)";
+		try (PreparedStatement st = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+			st.setString(1, produto.getDescricao());
+			st.setFloat(2, produto.getPreco());
+			st.setInt(3, produto.getQuant());
+			st.setTimestamp(4, Timestamp.valueOf(produto.getDataFabricacao()));
+			st.setDate(5, java.sql.Date.valueOf(produto.getDataValidade()));
+			
+			st.executeUpdate();
+			
+			try (ResultSet rs = st.getGeneratedKeys()) {
+				if (rs.next()) {
+					produto.setId(rs.getInt(1));
+				}
+			}
+		} catch (SQLException e) {
+			System.out.println("Erro ao inserir produto: " + e.getMessage());
 		}
 	}
 
 	public Produto get(int id) {
-		for (Produto produto : produtos) {
-			if (id == produto.getId()) {
-				return produto;
+		Produto produto = null;
+		String sql = "SELECT * FROM produto WHERE id = ?";
+		try (PreparedStatement st = connection.prepareStatement(sql)) {
+			st.setInt(1, id);
+			try (ResultSet rs = st.executeQuery()) {
+				if (rs.next()) {
+					produto = new Produto(
+							rs.getInt("id"),
+							rs.getString("descricao"),
+							rs.getFloat("preco"),
+							rs.getInt("quantidade"),
+							rs.getTimestamp("dataFabricacao").toLocalDateTime(),
+							rs.getDate("dataValidade").toLocalDate()
+					);
+				}
 			}
+		} catch (SQLException e) {
+			System.out.println("Erro ao buscar produto: " + e.getMessage());
 		}
-		return null;
+		return produto;
 	}
 
 	public void update(Produto p) {
-		int index = produtos.indexOf(p);
-		if (index != -1) {
-			produtos.set(index, p);
-			this.saveToFile();
+		String sql = "UPDATE produto SET descricao = ?, preco = ?, quantidade = ?, dataFabricacao = ?, dataValidade = ? WHERE id = ?";
+		try (PreparedStatement st = connection.prepareStatement(sql)) {
+			st.setString(1, p.getDescricao());
+			st.setFloat(2, p.getPreco());
+			st.setInt(3, p.getQuant());
+			st.setTimestamp(4, Timestamp.valueOf(p.getDataFabricacao()));
+			st.setDate(5, java.sql.Date.valueOf(p.getDataValidade()));
+			st.setInt(6, p.getId());
+			st.executeUpdate();
+		} catch (SQLException e) {
+			System.out.println("Erro ao atualizar produto: " + e.getMessage());
 		}
 	}
 
 	public void remove(Produto p) {
-		int index = produtos.indexOf(p);
-		if (index != -1) {
-			produtos.remove(index);
-			this.saveToFile();
+		String sql = "DELETE FROM produto WHERE id = ?";
+		try (PreparedStatement st = connection.prepareStatement(sql)) {
+			st.setInt(1, p.getId());
+			st.executeUpdate();
+		} catch (SQLException e) {
+			System.out.println("Erro ao remover produto: " + e.getMessage());
 		}
 	}
 
 	public List<Produto> getAll() {
-		return produtos;
-	}
-
-	private List<Produto> readFromFile() {
-		produtos.clear();
-		Produto produto = null;
-		try (FileInputStream fis = new FileInputStream(file);
-				ObjectInputStream inputFile = new ObjectInputStream(fis)) {
-
-			while (fis.available() > 0) {
-				produto = (Produto) inputFile.readObject();
-				produtos.add(produto);
-				maxId = (produto.getId() > maxId) ? produto.getId() : maxId;
+		List<Produto> produtos = new ArrayList<>();
+		String sql = "SELECT * FROM produto ORDER BY id";
+		try (Statement st = connection.createStatement();
+			 ResultSet rs = st.executeQuery(sql)) {
+			while (rs.next()) {
+				produtos.add(new Produto(
+						rs.getInt("id"),
+						rs.getString("descricao"),
+						rs.getFloat("preco"),
+						rs.getInt("quantidade"),
+						rs.getTimestamp("dataFabricacao").toLocalDateTime(),
+						rs.getDate("dataValidade").toLocalDate()
+				));
 			}
-		} catch (Exception e) {
-			System.out.println("ERRO ao gravar produto no disco!");
-			e.printStackTrace();
+		} catch (SQLException e) {
+			System.out.println("Erro ao listar produtos: " + e.getMessage());
 		}
 		return produtos;
-	}
-
-	private void saveToFile() {
-		try {
-			fos = new FileOutputStream(file, false);
-			outputFile = new ObjectOutputStream(fos);
-
-			for (Produto produto : produtos) {
-				outputFile.writeObject(produto);
-			}
-			outputFile.flush();
-			this.close();
-		} catch (Exception e) {
-			System.out.println("ERRO ao gravar produto no disco!");
-			e.printStackTrace();
-		}
-	}
-
-	private void close() throws IOException {
-		outputFile.close();
-		fos.close();
-	}
-
-	@Override
-	protected void finalize() throws Throwable {
-		try {
-			this.saveToFile();
-			this.close();
-		} catch (Exception e) {
-			System.out.println("ERRO ao salvar a base de dados no disco!");
-			e.printStackTrace();
-		}
 	}
 }

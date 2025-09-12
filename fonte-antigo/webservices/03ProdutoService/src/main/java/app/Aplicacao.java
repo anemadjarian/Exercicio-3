@@ -20,6 +20,7 @@ public class Aplicacao {
         get("/produto/delete/:id", (request, response) -> produtoService.remove(request, response));
 
         get("/produto", (request, response) -> produtoService.getAll(request, response));
-               
+        
+        
     }
 }
